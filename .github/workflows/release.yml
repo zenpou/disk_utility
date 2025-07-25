@@ -8,11 +8,7 @@ on:
 
 jobs:
   release:
-    runs-on: ${{ matrix.os }}
-    
-    strategy:
-      matrix:
-        os: [macos-latest]
+    runs-on: macos-latest
     
     steps:
     - name: Check out Git repository
@@ -33,7 +29,7 @@ jobs:
         github_token: ${{ secrets.github_token }}
         release: ${{ startsWith(github.ref, 'refs/tags/v') }}
         skip_build: false
-        args: --publish always
+        args: --mac --publish always
       env:
         # macOS notarization (optional)
         APPLE_ID: ${{ secrets.APPLE_ID }}
