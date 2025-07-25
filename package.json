@@ -8,7 +8,7 @@
     "dev": "electron . --dev",
     "build": "echo 'No additional build step needed for Electron'",
     "electron-pack": "electron-builder",
-    "build-mac": "electron-builder --mac",
+    "build-mac": "electron-builder --mac --publish never",
     "dist": "electron-builder --publish=never",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -40,11 +40,6 @@
       "node_modules/**/*",
       "package.json"
     ],
-    "publish": {
-      "provider": "github",
-      "owner": "zenpou",
-      "repo": "disk_utility"
-    },
     "mac": {
       "category": "public.app-category.utilities",
       "target": [
