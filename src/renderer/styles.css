@@ -1,0 +1,366 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #f5f5f5;
+    color: #333;
+}
+
+.container {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    background-color: #2c3e50;
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header h1 {
+    font-size: 24px;
+    font-weight: 300;
+}
+
+.controls button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    margin-left: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.controls button:hover:not(:disabled) {
+    background-color: #2980b9;
+}
+
+.controls button:disabled {
+    background-color: #7f8c8d;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.main-content {
+    flex: 1;
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+}
+
+.treemap-panel, .file-list-panel {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.treemap-panel {
+    flex: 2;
+}
+
+.file-list-panel {
+    flex: 1;
+}
+
+.panel-header {
+    background-color: #34495e;
+    color: white;
+    padding: 15px 20px;
+}
+
+.panel-header h2 {
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+
+#currentPath {
+    font-size: 14px;
+    opacity: 0.8;
+    font-family: monospace;
+}
+
+#treemap {
+    width: 100%;
+    height: calc(100% - 70px);
+    min-height: 400px;
+}
+
+#fileList {
+    padding: 20px;
+    height: calc(100% - 70px);
+    overflow-y: auto;
+}
+
+.file-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.file-table th,
+.file-table td {
+    padding: 4px 8px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+    white-space: nowrap;
+}
+
+.file-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+}
+
+.file-table tr:hover {
+    background-color: #f8f9fa;
+}
+
+.directory-name {
+    color: #e74c3c;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.directory-name:hover {
+    color: #c0392b;
+    text-decoration: underline;
+}
+
+.file-name {
+    color: #2c3e50;
+    white-space: nowrap;
+}
+
+.size-cell {
+    text-align: right;
+    font-family: monospace;
+    white-space: nowrap;
+}
+
+.type-directory {
+    color: #e74c3c;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.type-file {
+    color: #3498db;
+    white-space: nowrap;
+}
+
+.navigation-directory {
+    color: #f39c12;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.navigation-directory:hover {
+    color: #e67e22;
+    text-decoration: underline;
+}
+
+.type-navigation {
+    color: #f39c12;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.current-directory {
+    background-color: #fff3cd;
+    border-left: 3px solid #ffc107;
+}
+
+.parent-directory {
+    background-color: #f8f9fa;
+    border-left: 3px solid #6c757d;
+}
+
+.node-directory {
+    stroke: #fff;
+    stroke-width: 1px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.node-file {
+    stroke: #fff;
+    stroke-width: 0.5px;
+    transition: opacity 0.2s;
+}
+
+.node-directory:hover,
+.node-file:hover {
+    opacity: 0.8;
+}
+
+.rect-label {
+    font-size: 11px;
+    font-weight: 500;
+    fill: #000;
+    pointer-events: none;
+    text-shadow: 1px 1px 1px rgba(255, 255, 255, 0.8);
+}
+
+.rect-size-label {
+    font-size: 10px;
+    fill: #333;
+    pointer-events: none;
+}
+
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    font-size: 16px;
+    color: #666;
+}
+
+/* コンテキストメニュー */
+.context-menu {
+    position: absolute;
+    z-index: 1000;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+    padding: 4px 0;
+    min-width: 150px;
+    display: none;
+    user-select: none;
+}
+
+.context-menu-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #333;
+    transition: background-color 0.1s;
+}
+
+.context-menu-item:hover {
+    background-color: #f0f0f0;
+}
+
+.context-menu-item:active {
+    background-color: #e0e0e0;
+}
+
+.context-menu-item.disabled {
+    color: #999;
+    cursor: not-allowed;
+}
+
+.context-menu-item.disabled:hover {
+    background-color: transparent;
+}
+
+.context-menu-danger {
+    color: #e74c3c !important;
+}
+
+.context-menu-danger:hover {
+    background-color: #e74c3c !important;
+    color: white !important;
+}
+
+.context-menu-separator {
+    height: 1px;
+    background-color: #e0e0e0;
+    margin: 4px 0;
+}
+
+/* フォルダ選択オーバーレイ */
+.folder-selection-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+
+.folder-selection-overlay.hidden {
+    display: none;
+}
+
+.folder-selection-modal {
+    background-color: white;
+    border-radius: 12px;
+    padding: 40px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    text-align: center;
+}
+
+.folder-selection-modal h2 {
+    color: #2c3e50;
+    margin-bottom: 16px;
+    font-size: 24px;
+    font-weight: 500;
+}
+
+.folder-selection-modal p {
+    color: #666;
+    margin-bottom: 30px;
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+.folder-selection-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.primary-button, .secondary-button {
+    padding: 14px 28px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.primary-button {
+    background-color: #3498db;
+    color: white;
+}
+
+.primary-button:hover {
+    background-color: #2980b9;
+    transform: translateY(-1px);
+}
+
+.secondary-button {
+    background-color: #ecf0f1;
+    color: #2c3e50;
+    border: 1px solid #bdc3c7;
+}
+
+.secondary-button:hover {
+    background-color: #d5dbdb;
+    transform: translateY(-1px);
+}

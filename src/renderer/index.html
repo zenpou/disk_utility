@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disk Utility</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Disk Utility - ディスク容量分析</h1>
+            <div class="controls">
+                <button id="upBtn">上のディレクトリ</button>
+                <button id="refreshBtn">再読み込み</button>
+                <button id="selectFolderHeaderBtn">フォルダ選択</button>
+                <button id="homeBtn">ホームディレクトリ</button>
+                <button id="rootBtn">ルートディレクトリ</button>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="treemap-panel">
+                <div class="panel-header">
+                    <h2>ディスク使用量</h2>
+                    <div id="currentPath">/</div>
+                </div>
+                <div id="treemap"></div>
+            </div>
+            
+            <div class="file-list-panel">
+                <div class="panel-header">
+                    <h2>ファイル一覧</h2>
+                </div>
+                <div id="fileList">
+                    <p>フォルダを選択してください</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- フォルダ選択画面 -->
+    <div id="folderSelectionOverlay" class="folder-selection-overlay">
+        <div class="folder-selection-modal">
+            <h2>分析するフォルダを選択してください</h2>
+            <p>ディスク使用量を分析したいフォルダを選択してください。</p>
+            <div class="folder-selection-buttons">
+                <button id="selectFolderBtn" class="primary-button">フォルダを選択</button>
+                <button id="useHomeDirBtn" class="secondary-button">ホームディレクトリを使用</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- コンテキストメニュー -->
+    <div id="contextMenu" class="context-menu">
+        <div class="context-menu-item" id="openItem">開く</div>
+        <div class="context-menu-item" id="showInFinderItem">Finderで表示</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" id="copyPathItem">パスをコピー</div>
+        <div class="context-menu-item" id="copyNameItem">名前をコピー</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" id="propertiesItem">プロパティ</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item context-menu-danger" id="deleteItem">削除</div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
