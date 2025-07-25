@@ -1,6 +1,6 @@
 {
   "name": "disk_utility",
-  "version": "1.0.0",
+  "version": "0.1.0-beta",
   "description": "Disk Utility - ディスク容量分析アプリ",
   "main": "main.js",
   "scripts": {
