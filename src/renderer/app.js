@@ -152,6 +152,10 @@ class DiskUtilityApp {
                     this.loadDirectory(d.data.path);
                 }
             })
+            .on('contextmenu', (event, d) => {
+                event.preventDefault();
+                this.showContextMenu(event, d.data);
+            })
             .append('title')
             .text(d => `${d.data.name}\n${this.formatBytes(d.data.size)}\n${d.data.path}`);
 
@@ -221,13 +225,13 @@ class DiskUtilityApp {
 
         const tbody = table.createTBody();
         
-        // 現在のディレクトリ（.）を追加
-        this.addDirectoryNavigationRow(tbody, '.', this.data.size, 'current-directory');
-        
         // 親ディレクトリ（..）を追加（ルートディレクトリ以外）
         if (this.currentPath !== '/') {
             this.addDirectoryNavigationRow(tbody, '..', null, 'parent-directory');
         }
+        
+        // 現在のディレクトリ（.）を追加
+        this.addDirectoryNavigationRow(tbody, '.', this.data.size, 'current-directory');
         sortedFiles.forEach(file => {
             const row = tbody.insertRow();
             
