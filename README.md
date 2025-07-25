@@ -2,6 +2,7 @@
 
 ![Electron](https://img.shields.io/badge/Electron-37.2.4-blue)
 ![D3.js](https://img.shields.io/badge/D3.js-7.9.0-orange)
+![macOS](https://img.shields.io/badge/macOS-x64%20%7C%20arm64-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ディスク使用量を視覚的に分析できるElectronアプリケーションです。ツリーマップ表示でファイルとフォルダのサイズを直感的に把握できます。
@@ -58,38 +59,17 @@ npm run dev
 npm run build
 ```
 
-### プラットフォーム別ビルド
-
-#### macOS用
+### macOS用ビルド
 
 ```bash
 npm run build-mac
 ```
 
 生成されるファイル:
-- `dist/Disk Utility-1.0.0.dmg` - インストーラー
-- `dist/Disk Utility-1.0.0-mac.zip` - ZIPアーカイブ
+- `dist/Disk Utility-{version}.dmg` - インストーラー
+- `dist/Disk Utility-{version}-mac.zip` - ZIPアーカイブ
 - `dist/mac/Disk Utility.app` - アプリケーション本体
-
-#### Windows用
-
-```bash
-npm run build-win
-```
-
-生成されるファイル:
-- `dist/Disk Utility Setup 1.0.0.exe` - インストーラー
-- `dist/Disk Utility-1.0.0-win.zip` - ZIPアーカイブ
-
-#### Linux用
-
-```bash
-npm run build-linux
-```
-
-生成されるファイル:
-- `dist/Disk Utility-1.0.0.AppImage` - ポータブル実行ファイル
-- `dist/Disk Utility_1.0.0_amd64.deb` - DEBパッケージ
+- Intel (x64) と Apple Silicon (arm64) 両対応
 
 ### 配布用パッケージ作成
 
@@ -151,6 +131,7 @@ npm run dist
 - **D3.js**: データ視覚化ライブラリ
 - **Node.js**: バックエンドランタイム
 - **HTML/CSS/JavaScript**: フロントエンド
+- **プラットフォーム**: macOS専用 (Intel & Apple Silicon対応)
 - **開発支援**: [Claude Code](https://claude.ai/code) - AIペアプログラミング
 
 ## 📁 プロジェクト構造
@@ -183,7 +164,7 @@ disk_utility/
 - 大きなディレクトリの分析には時間がかかる場合があります
 - メモリ使用量はディレクトリのサイズに依存します
 
-### macOS での実行
+### 初回実行時の注意
 
 初回実行時に「開発者を確認できません」という警告が表示される場合があります：
 
