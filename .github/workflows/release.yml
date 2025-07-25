@@ -23,16 +23,17 @@ jobs:
     - name: Install dependencies
       run: npm ci
       
-    - name: Build/release Electron app
-      uses: samuelmeuli/action-electron-builder@v1
+    - name: Build Electron app
+      run: npm run build-mac
+      
+    - name: Upload to GitHub Releases
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
       with:
-        github_token: ${{ secrets.github_token }}
-        release: ${{ startsWith(github.ref, 'refs/tags/v') }}
-        skip_build: false
-        args: --mac --publish always
+        files: |
+          dist/*.dmg
+          dist/*.zip
+        draft: false
+        prerelease: true
       env:
-        # macOS notarization (optional)
-        APPLE_ID: ${{ secrets.APPLE_ID }}
-        APPLE_ID_PASS: ${{ secrets.APPLE_ID_PASS }}
-        CSC_LINK: ${{ secrets.CSC_LINK }}
-        CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
