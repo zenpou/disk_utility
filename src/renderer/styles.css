@@ -56,6 +56,8 @@ body {
     display: flex;
     gap: 20px;
     padding: 20px;
+    height: calc(100vh - 70px); /* ヘッダーを除いた高さを固定 */
+    overflow: hidden; /* メインコンテンツ自体はスクロールしない */
 }
 
 .treemap-panel, .file-list-panel {
@@ -63,6 +65,8 @@ body {
     border-radius: 8px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .treemap-panel {
@@ -93,14 +97,14 @@ body {
 
 #treemap {
     width: 100%;
-    height: calc(100% - 70px);
+    flex: 1; /* パネルヘッダーを除いた残り全部を使用 */
     min-height: 400px;
 }
 
 #fileList {
     padding: 20px;
-    height: calc(100% - 70px);
-    overflow-y: auto;
+    flex: 1; /* パネルヘッダーを除いた残り全部を使用 */
+    overflow-y: auto; /* 右側のみスクロール */
 }
 
 .file-table {
@@ -225,11 +229,60 @@ body {
 
 .loading {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     height: 100%;
     font-size: 16px;
     color: #666;
+    padding: 20px;
+}
+
+.progress-info {
+    margin: 15px 0;
+    text-align: center;
+    font-size: 14px;
+}
+
+.progress-info > div {
+    margin: 5px 0;
+}
+
+.current-path {
+    font-family: monospace;
+    font-size: 12px;
+    color: #888;
+    max-width: 400px;
+    word-break: break-all;
+}
+
+.progress-bar {
+    width: 300px;
+    height: 6px;
+    background-color: #e0e0e0;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3498db, #2980b9);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.progress-percentage {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #666;
+    font-weight: bold;
+}
+
+@keyframes progress-pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
 }
 
 /* コンテキストメニュー */

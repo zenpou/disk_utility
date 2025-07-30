@@ -1,10 +1,14 @@
 const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
 
 const execAsync = promisify(exec);
+
+// バックエンドキャッシュ
+const duCache = new Map(); // duコマンドの結果全体をキャッシュ
+const CACHE_EXPIRY = 3600000; // 1時間（フロントエンドと同じ）
 
 let mainWindow;
 
@@ -40,10 +44,10 @@ app.on('activate', () => {
   }
 });
 
-async function getDiskUsage(dirPath) {
+async function getDiskUsage(dirPath, event = null) {
   try {
     // 現在のディレクトリの直下の要素を取得
-    const result = await getDirectoryContents(dirPath);
+    const result = await getDirectoryContents(dirPath, event);
     return result;
   } catch (error) {
     console.error('Error getting disk usage:', error);
@@ -51,7 +55,7 @@ async function getDiskUsage(dirPath) {
   }
 }
 
-async function getDirectoryContents(dirPath) {
+async function getDirectoryContents(dirPath, event = null) {
   try {
     const stats = await fs.stat(dirPath);
     const baseName = path.basename(dirPath) || dirPath;
@@ -65,6 +69,27 @@ async function getDirectoryContents(dirPath) {
         children: []
       };
     }
+    
+    // キャッシュされた範囲を探すか、新しいルートとしてdirPathを使用
+    let duRootPath = findCachedRoot(dirPath);
+    if (!duRootPath) {
+      duRootPath = dirPath;
+      console.log(`No cached root found for ${dirPath}, using as new root`);
+    } else {
+      console.log(`Using cached root ${duRootPath} for ${dirPath}`);
+    }
+    
+    // 進捗コールバック関数
+    const onProgress = event ? (progress) => {
+      event.sender.send('du-progress', {
+        processedFiles: progress.processedFiles,
+        currentPath: progress.currentPath,
+        isComplete: progress.isComplete
+      });
+    } : null;
+    
+    // 全サイズ情報を一括取得（この時点でキャッシュされる）
+    const sizeMap = await getAllDirectorySizes(duRootPath, onProgress);
     
     const entries = await fs.readdir(dirPath);
     const children = [];
@@ -85,8 +110,8 @@ async function getDirectoryContents(dirPath) {
             type: 'file'
           });
         } else if (childStats.isDirectory()) {
-          // ディレクトリの場合は再帰的にサイズを計算
-          const dirSize = await calculateDirectorySize(fullPath);
+          // duキャッシュからサイズを取得（高速）
+          const dirSize = sizeMap.get(fullPath) || 0;
           children.push({
             name: entry,
             path: fullPath,
@@ -118,11 +143,261 @@ async function getDirectoryContents(dirPath) {
   }
 }
 
-async function calculateDirectorySize(dirPath) {
+// duキャッシュの有効性チェック
+function isDuCacheValid(rootPath) {
+  if (!duCache.has(rootPath)) {
+    return false;
+  }
+  
+  const cached = duCache.get(rootPath);
+  const now = Date.now();
+  const isValid = (now - cached.timestamp) < CACHE_EXPIRY;
+  
+  if (!isValid) {
+    console.log('DU cache expired for:', rootPath);
+    duCache.delete(rootPath);
+  }
+  
+  return isValid;
+}
+
+// キャッシュをクリア
+function clearDuCache() {
+  console.log('Clearing all DU cache');
+  duCache.clear();
+}
+
+// 特定のパスに関連するキャッシュを無効化
+function invalidateDuCache(targetPath) {
+  const normalizedTarget = normalizePath(targetPath);
+  const toDelete = [];
+  
+  for (const [cachedRoot] of duCache) {
+    const normalizedRoot = normalizePath(cachedRoot);
+    
+    // targetPathがcachedRootの子、親、または同じの場合は無効化
+    if (normalizedTarget === normalizedRoot || 
+        normalizedTarget.startsWith(normalizedRoot + path.sep) ||
+        normalizedRoot.startsWith(normalizedTarget + path.sep)) {
+      toDelete.push(cachedRoot);
+    }
+  }
+  
+  toDelete.forEach(root => {
+    console.log('Invalidating DU cache for:', root);
+    duCache.delete(root);
+  });
+}
+
+// 進捗付きでduコマンドを実行（ストリーミング処理）
+function executeDuWithProgress(rootPath, includeFiles = true, onProgress = null) {
+  return new Promise((resolve, reject) => {
+    const duArgs = includeFiles ? ['-ak', rootPath] : ['-k', rootPath];
+    const duProcess = spawn('du', duArgs);
+    
+    const sizeMap = new Map();
+    let buffer = '';
+    let lineCount = 0;
+    let lastProgressTime = Date.now();
+    let currentPath = rootPath;
+    
+    duProcess.stdout.on('data', (data) => {
+      buffer += data.toString();
+      
+      // 行ごとに処理（メモリ効率向上）
+      let newlineIndex;
+      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIndex);
+        buffer = buffer.slice(newlineIndex + 1);
+        
+        if (line.trim()) {
+          const parts = line.split('\t');
+          if (parts.length >= 2) {
+            const sizeKB = parseInt(parts[0]);
+            const filePath = parts[1];
+            const sizeBytes = sizeKB * 1024;
+            sizeMap.set(filePath, sizeBytes);
+            currentPath = filePath;
+            lineCount++;
+          }
+        }
+      }
+      
+      // 進捗更新（1秒に1回程度）
+      const now = Date.now();
+      if (onProgress && (now - lastProgressTime) > 1000) {
+        onProgress({
+          processedFiles: lineCount,
+          currentPath: currentPath,
+          isComplete: false
+        });
+        
+        lastProgressTime = now;
+      }
+    });
+    
+    duProcess.stderr.on('data', (data) => {
+      console.warn('du stderr:', data.toString());
+    });
+    
+    duProcess.on('close', (code) => {
+      // 残りのバッファを処理
+      if (buffer.trim()) {
+        const parts = buffer.trim().split('\t');
+        if (parts.length >= 2) {
+          const sizeKB = parseInt(parts[0]);
+          const filePath = parts[1];
+          const sizeBytes = sizeKB * 1024;
+          sizeMap.set(filePath, sizeBytes);
+          lineCount++;
+        }
+      }
+      
+      if (code === 0) {
+        // 完了時の進捗更新
+        if (onProgress) {
+          onProgress({
+            processedFiles: lineCount,
+            currentPath: rootPath,
+            isComplete: true
+          });
+        }
+        console.log(`DU completed: processed ${lineCount} entries, map size: ${sizeMap.size}`);
+        resolve(sizeMap);
+      } else {
+        reject(new Error(`du command failed with code ${code}`));
+      }
+    });
+    
+    duProcess.on('error', (error) => {
+      reject(error);
+    });
+    
+    // タイムアウト処理
+    const timeout = setTimeout(() => {
+      duProcess.kill();
+      reject(new Error('du command timed out after 10 minutes'));
+    }, 600000); // 10分
+    
+    duProcess.on('close', () => {
+      clearTimeout(timeout);
+    });
+  });
+}
+
+// 指定されたルートディレクトリ以下の全サイズ情報を一括取得
+async function getAllDirectorySizes(rootPath, onProgress = null) {
   try {
-    const { stdout } = await execAsync(`du -s "${dirPath}"`);
-    const size = parseInt(stdout.split('\t')[0]) * 1024; // KB to bytes
-    return size;
+    // キャッシュチェック
+    if (isDuCacheValid(rootPath)) {
+      console.log('Using cached DU data for:', rootPath);
+      return duCache.get(rootPath).sizeMap;
+    }
+
+    console.log('Fetching fresh DU data for:', rootPath);
+    
+    // 進捗コールバック付きでdu実行（直接Mapを返す）
+    const sizeMap = await executeDuWithProgress(rootPath, true, onProgress);
+    
+    // キャッシュに保存
+    duCache.set(rootPath, {
+      sizeMap: sizeMap,
+      timestamp: Date.now()
+    });
+    
+    console.log(`Cached ${sizeMap.size} entries for ${rootPath}`);
+    return sizeMap;
+    
+  } catch (error) {
+    console.warn(`Error getting DU data for ${rootPath}: ${error.message}`);
+    
+    // フォールバック処理
+    if (error.message.includes('maxBuffer') || error.message.includes('stdout maxBuffer') || error.message.includes('timed out') || error.message.includes('Invalid string length')) {
+      console.log('Trying fallback: du without -a option (directories only)');
+      try {
+        // フォールバックでも直接Mapを返すストリーミング処理を使用
+        const sizeMap = await executeDuWithProgress(rootPath, false, onProgress);
+        
+        // フォールバックキャッシュに保存
+        duCache.set(rootPath, {
+          sizeMap: sizeMap,
+          timestamp: Date.now()
+        });
+        
+        console.log(`Fallback: Cached ${sizeMap.size} directory entries for ${rootPath}`);
+        return sizeMap;
+        
+      } catch (fallbackError) {
+        console.warn(`Fallback also failed for ${rootPath}: ${fallbackError.message}`);
+      }
+    }
+    
+    return new Map();
+  }
+}
+
+// パスを正規化（末尾のスラッシュを削除、相対パスを絶対パスに変換）
+function normalizePath(filePath) {
+  const resolved = path.resolve(filePath);
+  return resolved.replace(/\/+$/, '') || '/';
+}
+
+// 指定されたパスがどのキャッシュルートに含まれるかを検索
+function findCachedRoot(targetPath) {
+  const normalizedTarget = normalizePath(targetPath);
+  
+  let bestMatch = null;
+  let bestMatchLength = 0;
+  
+  for (const [cachedRoot, cacheData] of duCache) {
+    // キャッシュが有効かチェック
+    const now = Date.now();
+    if ((now - cacheData.timestamp) >= CACHE_EXPIRY) {
+      continue;
+    }
+    
+    const normalizedRoot = normalizePath(cachedRoot);
+    
+    // targetPathがcachedRootの子または同じパスかチェック
+    if (normalizedTarget === normalizedRoot || 
+        normalizedTarget.startsWith(normalizedRoot + path.sep)) {
+      // より深い（具体的な）マッチを優先
+      if (normalizedRoot.length > bestMatchLength) {
+        bestMatch = cachedRoot;
+        bestMatchLength = normalizedRoot.length;
+      }
+    }
+  }
+  
+  return bestMatch;
+}
+
+// 特定のディレクトリサイズを効率的に取得
+async function calculateDirectorySize(dirPath, rootPath = null) {
+  try {
+    let duRootPath = rootPath;
+    
+    // ルートパスが指定されていない場合は、キャッシュから探す
+    if (!duRootPath) {
+      duRootPath = findCachedRoot(dirPath);
+      if (!duRootPath) {
+        // キャッシュにない場合は、dirPathをルートとして使用
+        duRootPath = dirPath;
+      }
+    }
+    
+    // 全サイズ情報を取得（キャッシュから、または新規取得）
+    const sizeMap = await getAllDirectorySizes(duRootPath);
+    
+    // 指定されたディレクトリのサイズを取得
+    if (sizeMap.has(dirPath)) {
+      return sizeMap.get(dirPath);
+    }
+    
+    // 見つからない場合は0を返す
+    console.warn(`Size not found for ${dirPath} in DU data`);
+    return 0;
+    
   } catch (error) {
     console.warn(`Error calculating size for ${dirPath}: ${error.message}`);
     return 0;
@@ -235,7 +510,7 @@ async function getFileList(dirPath) {
 }
 
 ipcMain.handle('get-disk-usage', async (event, dirPath) => {
-  return await getDiskUsage(dirPath);
+  return await getDiskUsage(dirPath, event);
 });
 
 ipcMain.handle('get-file-list', async (event, dirPath) => {
@@ -375,4 +650,16 @@ ipcMain.handle('delete-file', async (event, filePath) => {
     
     return { success: false, error: errorMessage };
   }
+});
+
+// キャッシュクリア用のIPCハンドラー
+ipcMain.handle('clear-du-cache', () => {
+  clearDuCache();
+  return { success: true };
+});
+
+// 特定パスのキャッシュ無効化用のIPCハンドラー
+ipcMain.handle('invalidate-du-cache', (event, targetPath) => {
+  invalidateDuCache(targetPath);
+  return { success: true };
 });

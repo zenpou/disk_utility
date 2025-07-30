@@ -3,12 +3,93 @@ class DiskUtilityApp {
         this.currentPath = '/';
         this.data = [];
         this.contextMenuTarget = null;
+        this.cache = new Map(); // ディレクトリデータのキャッシュ
+        this.cacheExpiry = 3600000; // キャッシュの有効期限（1時間 = 60分 × 60秒 × 1000ms）
+        this.progressStartTime = null; // 進捗開始時刻
         this.init();
     }
 
     async init() {
         this.setupEventListeners();
+        this.setupProgressListener();
         this.showFolderSelection();
+    }
+    
+    setupProgressListener() {
+        // DU進捗リスナーを設定
+        window.electronAPI.onDuProgress((progress) => {
+            this.updateProgressDisplay(progress);
+        });
+    }
+    
+    updateProgressDisplay(progress) {
+        const { processedFiles, currentPath, isComplete } = progress;
+        
+        if (isComplete) {
+            // 完了時は通常のローディング表示に戻す
+            this.progressStartTime = null;
+            return;
+        }
+        
+        // 進捗率を推定（複数の要因を組み合わせ）
+        let estimatedProgress = 0;
+        
+        // 1. ファイル数ベースの進捗（対数スケール）
+        const fileBasedProgress = Math.min(70, Math.log10(Math.max(1, processedFiles)) * 15);
+        
+        // 2. 時間ベースの進捗
+        let timeBasedProgress = 0;
+        if (this.progressStartTime) {
+            const elapsed = (Date.now() - this.progressStartTime) / 1000; // 秒
+            // 最初の30秒で50%、その後は緩やかに上昇
+            if (elapsed <= 30) {
+                timeBasedProgress = (elapsed / 30) * 50;
+            } else {
+                timeBasedProgress = 50 + Math.min(40, (elapsed - 30) / 60 * 40);
+            }
+        }
+        
+        // 3. 両方の要因を組み合わせ（より高い値を採用、但し95%でキャップ）
+        estimatedProgress = Math.min(95, Math.max(fileBasedProgress, timeBasedProgress));
+        
+        // 経過時間の表示
+        const elapsed = this.progressStartTime ? Math.floor((Date.now() - this.progressStartTime) / 1000) : 0;
+        const elapsedDisplay = elapsed > 0 ? `${elapsed}秒経過` : '';
+        
+        // 進捗表示を更新
+        const progressHTML = `
+            <div class="loading">
+                <div>読み込み中... ${elapsedDisplay}</div>
+                <div class="progress-info">
+                    <div>処理済み: ${processedFiles.toLocaleString()} ファイル</div>
+                    <div class="current-path">現在: ${this.truncatePath(currentPath)}</div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-bar-fill" style="width: ${estimatedProgress}%"></div>
+                </div>
+                <div class="progress-percentage">${Math.round(estimatedProgress)}%</div>
+            </div>
+        `;
+        
+        document.getElementById('treemap').innerHTML = progressHTML;
+        document.getElementById('fileList').innerHTML = progressHTML;
+    }
+    
+    truncatePath(fullPath, maxLength = 60) {
+        if (fullPath.length <= maxLength) {
+            return fullPath;
+        }
+        
+        // パスを省略形で表示
+        const parts = fullPath.split('/');
+        if (parts.length <= 2) {
+            return fullPath;
+        }
+        
+        // 最初と最後の部分を保持
+        const start = parts.slice(0, 2).join('/');
+        const end = parts.slice(-2).join('/');
+        return `${start}/.../${end}`;
     }
 
     setupEventListeners() {
@@ -63,18 +144,39 @@ class DiskUtilityApp {
         });
     }
 
-    async loadDirectory(path) {
+    async loadDirectory(path, forceReload = false) {
         this.currentPath = path;
         document.getElementById('currentPath').textContent = path;
+        
+        // キャッシュチェック
+        if (!forceReload && this.isCacheValid(path)) {
+            console.log('Using cached data for:', path);
+            const cachedData = this.cache.get(path).data;
+            this.data = cachedData;
+            this.renderTreemap(cachedData);
+            this.renderFileList(cachedData.children || []);
+            this.updateButtonStates(false);
+            return;
+        }
         
         // ボタンの状態を更新
         this.updateButtonStates(true); // ローディング中
         
-        document.getElementById('treemap').innerHTML = '<div class="loading">読み込み中...</div>';
-        document.getElementById('fileList').innerHTML = '<div class="loading">読み込み中...</div>';
+        // 進捗開始時刻を記録
+        this.progressStartTime = Date.now();
+        
+        document.getElementById('treemap').innerHTML = '<div class="loading">読み込み中...<br><small>大きなディレクトリの場合、数分かかることがあります</small></div>';
+        document.getElementById('fileList').innerHTML = '<div class="loading">読み込み中...<br><small>大きなディレクトリの場合、数分かかることがあります</small></div>';
 
         try {
+            console.log('Fetching fresh data for:', path);
             const diskData = await window.electronAPI.getDiskUsage(path);
+
+            // データをキャッシュに保存
+            this.cache.set(path, {
+                data: diskData,
+                timestamp: Date.now()
+            });
 
             this.data = diskData;
             this.renderTreemap(diskData);
@@ -86,6 +188,41 @@ class DiskUtilityApp {
         } finally {
             // ローディング完了後にボタンの状態を復元
             this.updateButtonStates(false);
+        }
+    }
+
+    // キャッシュの有効性をチェック
+    isCacheValid(path) {
+        if (!this.cache.has(path)) {
+            return false;
+        }
+        
+        const cached = this.cache.get(path);
+        const now = Date.now();
+        const isValid = (now - cached.timestamp) < this.cacheExpiry;
+        
+        if (!isValid) {
+            console.log('Cache expired for:', path);
+            this.cache.delete(path);
+        }
+        
+        return isValid;
+    }
+
+    // キャッシュをクリア
+    clearCache() {
+        console.log('Clearing all cache');
+        this.cache.clear();
+    }
+
+    // 特定のパスのキャッシュを削除
+    invalidateCache(path) {
+        console.log('Invalidating cache for:', path);
+        this.cache.delete(path);
+        // 親ディレクトリのキャッシュも削除（ファイル削除などの場合）
+        const parentPath = this.getParentPath(path);
+        if (parentPath !== path) {
+            this.cache.delete(parentPath);
         }
     }
 
@@ -364,10 +501,23 @@ class DiskUtilityApp {
         this.updateButtonStates(false);
     }
 
-    refreshCurrentDirectory() {
+    async refreshCurrentDirectory() {
         if (this.currentPath) {
             console.log('Refreshing current directory:', this.currentPath);
-            this.loadDirectory(this.currentPath);
+            
+            // フロントエンドキャッシュをクリア
+            this.clearCache();
+            
+            // バックエンドキャッシュもクリア
+            try {
+                await window.electronAPI.clearDuCache();
+                console.log('Backend DU cache cleared');
+            } catch (error) {
+                console.warn('Failed to clear backend cache:', error);
+            }
+            
+            // 強制リロード（キャッシュを無視）
+            this.loadDirectory(this.currentPath, true);
         }
     }
 
@@ -540,6 +690,19 @@ class DiskUtilityApp {
             
             if (result.success) {
                 console.log('Successfully deleted:', fileData.path);
+                
+                // フロントエンドキャッシュを無効化
+                this.invalidateCache(fileData.path);
+                this.invalidateCache(this.currentPath);
+                
+                // バックエンドキャッシュも無効化
+                try {
+                    await window.electronAPI.invalidateDuCache(fileData.path);
+                    console.log('Backend DU cache invalidated for:', fileData.path);
+                } catch (error) {
+                    console.warn('Failed to invalidate backend cache:', error);
+                }
+                
                 // 削除成功後、現在のディレクトリを再読み込み
                 this.refreshCurrentDirectory();
                 
